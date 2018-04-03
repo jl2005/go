@@ -18,6 +18,7 @@ import (
 // The zero value for a RWMutex is an unlocked mutex.
 //
 // An RWMutex must not be copied after first use.
+// 不能复制已经使用的RWMutex，特别在函数传参数的时候，是要传递指针，而不是值
 //
 // If a goroutine holds a RWMutex for reading and another goroutine might
 // call Lock, no goroutine should expect to be able to acquire a read lock
@@ -25,12 +26,37 @@ import (
 // recursive read locking. This is to ensure that the lock eventually becomes
 // available; a blocked Lock call excludes new readers from acquiring the
 // lock.
+//
+// 当有写锁定的时候，后面的读请求都需要等到写完成之后才能获取锁。
+/*
+	var m sync.RWMutex
+	wait := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		m.RLock()
+		close(wait)
+		time.Sleep(time.Second)
+		fmt.Println("wait read lock 2")
+		m.RLock()
+		m.RUnlock()
+		m.RUnlock()
+		close(done)
+	}()
+	go func() {
+		<-wait
+		fmt.Println("wait write lock")
+		m.Lock()
+		m.Unlock()
+	}()
+	fmt.Println("vim-go")
+	<-done
+*/
 type RWMutex struct {
 	w           Mutex  // held if there are pending writers
 	writerSem   uint32 // semaphore for writers to wait for completing readers
 	readerSem   uint32 // semaphore for readers to wait for completing writers
-	readerCount int32  // number of pending readers
-	readerWait  int32  // number of departing readers
+	readerCount int32  // number of pending readers  reader总数
+	readerWait  int32  // number of departing readers 已经执行的reader的数量
 }
 
 const rwmutexMaxReaders = 1 << 30
@@ -47,6 +73,7 @@ func (rw *RWMutex) RLock() {
 	}
 	if atomic.AddInt32(&rw.readerCount, 1) < 0 {
 		// A writer is pending, wait for it.
+		// 当已经有writer的时候，则等待
 		runtime_Semacquire(&rw.readerSem)
 	}
 	if race.Enabled {
@@ -90,10 +117,13 @@ func (rw *RWMutex) Lock() {
 		race.Disable()
 	}
 	// First, resolve competition with other writers.
+	// 避免同时有两个 写锁 进行竞争
 	rw.w.Lock()
 	// Announce to readers there is a pending writer.
+	// 通知reader，当前有writer
 	r := atomic.AddInt32(&rw.readerCount, -rwmutexMaxReaders) + rwmutexMaxReaders
 	// Wait for active readers.
+	// 等待活动的reader结束之后，唤醒writer
 	if r != 0 && atomic.AddInt32(&rw.readerWait, r) != 0 {
 		runtime_Semacquire(&rw.writerSem)
 	}
