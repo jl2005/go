@@ -17,18 +17,25 @@ import (
 // Wait can be used to block until all goroutines have finished.
 //
 // A WaitGroup must not be copied after first use.
+//
+// WaitGroup不能直接被拷贝，所以作为参数的时候需要传递指针
 type WaitGroup struct {
-	noCopy noCopy
+	noCopy noCopy // 用户go vet 检查
 
 	// 64-bit value: high 32 bits are counter, low 32 bits are waiter count.
 	// 64-bit atomic operations require 64-bit alignment, but 32-bit
 	// compilers do not ensure it. So we allocate 12 bytes and then use
 	// the aligned 8 bytes in them as state.
+	//
+	// 64-bit：高32位是计数器，低32位是等待计数
+	// 64位原子操作需要64位对齐，但是 32 位编译器并不能保证这一点，所以开辟了 12 字节
+	// 的数组，但是只用其中的 8 字节作为 state
 	state1 [12]byte
 	sema   uint32
 }
 
 func (wg *WaitGroup) state() *uint64 {
+	// 如果是64位对齐的则直接返回，否则取后半部分
 	if uintptr(unsafe.Pointer(&wg.state1))%8 == 0 {
 		return (*uint64)(unsafe.Pointer(&wg.state1))
 	} else {
@@ -61,8 +68,8 @@ func (wg *WaitGroup) Add(delta int) {
 		defer race.Enable()
 	}
 	state := atomic.AddUint64(statep, uint64(delta)<<32)
-	v := int32(state >> 32)
-	w := uint32(state)
+	v := int32(state >> 32) // 保留state的高32位，作为已经Add的计数
+	w := uint32(state)      // 截取state的低32位，作为waiter的计数
 	if race.Enabled {
 		if delta > 0 && v == int32(delta) {
 			// The first increment must be synchronized with Wait.
@@ -89,6 +96,8 @@ func (wg *WaitGroup) Add(delta int) {
 		panic("sync: WaitGroup misuse: Add called concurrently with Wait")
 	}
 	// Reset waiters count to 0.
+	// 如果要是并发调用，这里可能会有问题？
+	// WaitGroup是作为等待的，而不应该并发使用
 	*statep = 0
 	for ; w != 0; w-- {
 		runtime_Semrelease(&wg.sema, false)
@@ -128,6 +137,7 @@ func (wg *WaitGroup) Wait() {
 				// otherwise concurrent Waits will race with each other.
 				race.Write(unsafe.Pointer(&wg.sema))
 			}
+			// 等待信号通知
 			runtime_Semacquire(&wg.sema)
 			if *statep != 0 {
 				panic("sync: WaitGroup is reused before previous Wait has returned")
