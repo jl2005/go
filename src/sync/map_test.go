@@ -13,6 +13,7 @@ import (
 	"testing/quick"
 )
 
+// +- 定义常量的方法值得借鉴
 type mapOp string
 
 const (
