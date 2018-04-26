@@ -31,7 +31,7 @@ import (
 //
 // +-? 它优化了对key的并发循环，有很少的store，或每个key存储到goroutine的本地.
 //
-// +-? 对于不具有这些属性的用例，与使用读写锁的map相比，它可能持平或更差的性能，更坏的类型安全。
+// +- 对于不具有这些属性的场景，与使用读写锁的map相比，它可能持平或更差的性能，更坏的类型安全。
 //
 // 空 Map 是有效的和空的。
 //
@@ -136,6 +136,13 @@ type entry struct {
 	// m.dirty[key] = e 之后才可以被更新，以便可以在dirty map中找到entry
 	p unsafe.Pointer // *interface{}
 }
+
+// p 的状态转换
+//     tryExpungeLocked: 在拷贝m.read 到m.dirty时，已经删除的数据设置为expunged
+// nil -----------------------------------------------------------------------> expunged
+//
+//           unexpungeLocked: 重新设置已经删除的数据
+// expunged -----------------------------------------> nil
 
 func newEntry(i interface{}) *entry {
 	return &entry{p: unsafe.Pointer(&i)}
@@ -344,6 +351,10 @@ func (e *entry) tryLoadOrStore(i interface{}) (actual interface{}, loaded, ok bo
 	// to escape analysis: if we hit the "load" path or the entry is expunged, we
 	// shouldn't bother heap-allocating.
 	// +-? 这里不知道它在说什么？
+	// 在第一次load之后拷贝接口，使得这个方法经得起逃避分析：如果处于 load 方法，或者
+	// entry 是expunged， 我们不应该打断堆分配。
+	// PS: [逃逸分析](https://zh.wikipedia.org/wiki/%E9%80%83%E9%80%B8%E5%88%86%E6%9E%90)
+	//     个人理解：如果指针只在本函数使用，则需要分配到栈上，否则需要分配到堆上
 	ic := i
 	for {
 		if atomic.CompareAndSwapPointer(&e.p, nil, unsafe.Pointer(&ic)) {
@@ -378,10 +389,10 @@ func (m *Map) Delete(key interface{}) {
 }
 
 func (e *entry) delete() (hadValue bool) {
-	// +-? delete 的时候，又有重新的Store，是否会有问题？
+	// delete 的时候，又有重新的Store，是否会有问题？
 	// 不会的，因为这个entry相当于已经从map中删除了，重新添加的是新的entry
 	// 真的是这样吗？
-	// 在Store的时候也是更改entry中的指针，所以如果Store和Delete并发执行，Delete可能会删除Store新添加的数据
+	// +- 在Store的时候也是更改entry中的指针，所以如果Store和Delete并发执行，Delete可能会删除Store新添加的数据
 	for {
 		p := atomic.LoadPointer(&e.p)
 		if p == nil || p == expunged {
