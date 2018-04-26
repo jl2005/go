@@ -57,11 +57,11 @@ func NewCond(l Locker) *Cond {
 //    c.L.Unlock()
 //
 // 通知协程可以这样写
-//   L.Lock()  <-- 这里需要先锁定
+//   //L.Lock()  <-- 这里需要先锁定? 不用锁定
 //   c.Sign()
-//   L.Unlock()
+//   //L.Unlock()
 // ----------------------------------------------------------
-//  在使用Broadcast的场景，则可以使用RWMutex替换Mutex，提高唤醒的并发度。
+//  +- 在使用Broadcast的场景，则可以使用RWMutex替换Mutex，提高唤醒的并发度。
 //
 //  var n int
 //  flag.IntVar(&n, "n", 2, "wait num")
@@ -73,7 +73,7 @@ func NewCond(l Locker) *Cond {
 //  exit := false
 //  for i := 0; i < n; i++ {
 //      go func(g int) {
-//          m.RLock()
+//          m.RLock() // <-- 这里调用RLock，多个goroutine就可以同时执行
 //          for !exit {
 //              running <- g
 //              c.Wait()
@@ -86,9 +86,9 @@ func NewCond(l Locker) *Cond {
 //      <-running // Will deadlock unless n are running.
 //  }
 //  exit = true
-//  m.Lock()
+//  //c.L.Lock()
 //  c.Broadcast()
-//  m.Unlock()
+//  //c.Lm.Unlock()
 //  seen := make([]bool, n)
 //  start := time.Now()
 //  for i := 0; i < n; i++ {
@@ -113,6 +113,10 @@ func (c *Cond) Wait() {
 //
 // It is allowed but not required for the caller to hold c.L
 // during the call.
+//
+// Signal 唤醒等在c上的一个goroutine
+//
+// 在调用的时候可以持有c.L，但是不是必须的
 func (c *Cond) Signal() {
 	c.checker.check()
 	runtime_notifyListNotifyOne(&c.notify)
@@ -122,12 +126,17 @@ func (c *Cond) Signal() {
 //
 // It is allowed but not required for the caller to hold c.L
 // during the call.
+//
+// Broadcast 唤醒所有等在c上的goroutine
+//
+// 在调用的时候可以持有c.L，但是不是必须的
 func (c *Cond) Broadcast() {
 	c.checker.check()
 	runtime_notifyListNotifyAll(&c.notify)
 }
 
 // copyChecker holds back pointer to itself to detect object copying.
+// copyChecker 持有上一次自己的指针，用于检查拷贝
 type copyChecker uintptr
 
 func (c *copyChecker) check() {
