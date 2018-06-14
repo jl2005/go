@@ -90,7 +90,7 @@ const (
 	//   1. 它是队列中最后一个等待者
 	//   2. 它等待的时间少于 1ms
 	// normal 模式会有更高的性能，因为即使有很多的等待者，一个 goroutine 也可以多次获得锁。
-	// starvation 模式则可以队尾长时间无法调度的问题
+	// starvation 模式则可以解决队尾长时间无法调度的问题
 	starvationThresholdNs = 1e6 //饥饿模式的阀值，=1ms
 )
 

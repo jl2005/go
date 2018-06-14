@@ -56,7 +56,7 @@ import (
 // 并可能被重用。Pool提供了一种方法，缓解跨多个客户端的分配（allocation）开销。
 //
 // fmt包中有一个Pool的很好使用的例子，它维护了一个动态大小的临时输出缓冲（buffer）的存储区（store）。
-// 这个存储区在很多goroutine活跃打印的时候进行调整，在不活跃的时候进行收缩。
+// 这个存储区在很多goroutine活跃打印的时候扩大，在不活跃的时候进行收缩。
 //
 // 另一方面，对短期对象的一部分而维护的空闲列表是不适合使用Pool的，因为在该场景中开销并不能很好地被分摊。
 // 让这些对象实现自己的空闲列表会更高效。
@@ -137,7 +137,7 @@ func (p *Pool) Put(x interface{}) {
 		l.private = x
 		x = nil
 	}
-	runtime_procUnpin() //后面会使用lock锁定，所以这里直接释放
+	runtime_procUnpin() // 在pin中会锁定，所以在这里释放
 	if x != nil {
 		l.Lock()
 		l.shared = append(l.shared, x)
@@ -243,7 +243,7 @@ func (p *Pool) pin() *poolLocal {
 	return p.pinSlow()
 }
 
-// 尝试修复重新分批local
+// 尝试修复重新分配local
 func (p *Pool) pinSlow() *poolLocal {
 	// Retry under the mutex.
 	// Can not lock the mutex while pinned.
@@ -285,7 +285,7 @@ func poolCleanup() {
 	// 这个函数是在world stopped的时候被调用的，在GC开始的时候
 	// 它**不能**分配，也不应该调用runtime functions
 	// 防御性的将所有归零，有两个原因：
-	// 1. 方式整个Pool的错误保留
+	// 1. 防止整个Pool的错误保留
 	// 2. 如果goroutine正在在Put/Get中使用l.shared，此时发生GC，它将保留整个Pool。
 	//    这样下一次循环，内存消耗会增加一倍。
 	for i, p := range allPools {
