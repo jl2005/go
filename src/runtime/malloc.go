@@ -629,6 +629,7 @@ var zerobase uintptr
 // nextFreeFast 返回下一个空闲对象，否则返回0
 func nextFreeFast(s *mspan) gclinkptr {
 	theBit := sys.Ctz64(s.allocCache) // Is there a free object in the allocCache?
+	// 相当于这个span是空的
 	if theBit < 64 {
 		result := s.freeindex + uintptr(theBit)
 		if result < s.nelems {
@@ -652,6 +653,11 @@ func nextFreeFast(s *mspan) gclinkptr {
 // weight allocation. If it is a heavy weight allocation the caller must
 // determine whether a new GC cycle needs to be started or if the GC is active
 // whether this goroutine needs to assist the GC.
+//
+// +-? 这个翻译的有问题
+// nextFree 如果存在一个缓存的空闲对象，则返回，否则使用一个可用对象的span填充
+// cache，然后使用一个权重标志填充span。如果是高权重分配，调用者必须决定是否
+// 需要启动一个GC，或者GC是否处于活动状态，是否需要将goroutine给GC
 func (c *mcache) nextFree(spc spanClass) (v gclinkptr, s *mspan, shouldhelpgc bool) {
 	s = c.alloc[spc]
 	shouldhelpgc = false

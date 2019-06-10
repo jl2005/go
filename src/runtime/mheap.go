@@ -217,7 +217,8 @@ type mspan struct {
 	list *mSpanList // For debugging. TODO: Remove.
 
 	startAddr uintptr // address of first byte of span aka s.base()
-	npages    uintptr // number of pages in span
+	// span中包page个数
+	npages uintptr // number of pages in span
 
 	manualFreeList gclinkptr // list of free objects in _MSpanManual spans
 
@@ -227,7 +228,14 @@ type mspan struct {
 	// indicating a free object. freeindex is then adjusted so that subsequent scans begin
 	// just past the newly discovered free object.
 	//
+	// freeindex 是一个在0到nelems之间的槽索引，从索引开始查找下一个空闲的span。
+	// 每次申请内存的时候从freeindex开始扫描，直到碰到allocBits=0，
+	// 表示一个空的对象。然后调整freeindex，以便后面的扫描可以从
+	// 刚刚发现的空闲对象开始。
+	//
 	// If freeindex == nelem, this span has no free objects.
+	//
+	// 如果 freeindex == nelem，则表示span没有空闲对象
 	//
 	// allocBits is a bitmap of objects in this span.
 	// If n >= freeindex and allocBits[n/8] & (1<<(n%8)) is 0
@@ -236,9 +244,17 @@ type mspan struct {
 	// undefined and should never be referenced.
 	//
 	// Object n starts at address n*elemsize + (start << pageShift).
+	//
+	// span中的allocBits是一个对象的bitmap。
+	// 如果n >= freeindex 并且allocBits[n/8] & (1<<(n%8))=0
+	// 则对象n是空闲的。否则对象n是已经分配的。nelem对应的
+	// 位是没有定义的，并且不应该被访问
+	//
+	// 对象n的开始地址为 n*elemsize + (start << pageShift)
 	freeindex uintptr
 	// TODO: Look up nelems from sizeclass and remove this field if it
 	// helps performance.
+	// span中的对象数
 	nelems uintptr // number of object in the span.
 
 	// Cache of the allocBits at freeindex. allocCache is shifted
@@ -247,6 +263,10 @@ type mspan struct {
 	// ctz (count trailing zero) to use it directly.
 	// allocCache may contain bits beyond s.nelems; the caller must ignore
 	// these.
+	//
+	// 缓存freeindex中已经分配的位。allocCache是被移位的，使得最低位对应于
+	// freeindex。allocCache保存allocBits的补码，因此可以直接使用ctz（计算尾部0）
+	// allocCache 可能包换超过s.elems的位，调用者必须忽略这些。
 	allocCache uint64
 
 	// allocBits and gcmarkBits hold pointers to a span's mark and
@@ -265,12 +285,29 @@ type mspan struct {
 	// memory to hold gcmarkBits for the next GC cycle as well
 	// as allocBits for newly allocated spans.
 	//
+	// allocBits 和 gcmarkBits持有span的标记和分配位。
+	// 指针是8字节对齐的。有3中状态：
+	//
+	// * free: 过期的arena不再被使用，可以被重用
+	// * next: 保存在下一次循环中使用的信息
+	// * current: 此次GC循环中使用的信息
+	// * previous: 上一次GC循环中使用的信息
+	// 一个新的GC循环开始于对finishsweep_m的调用。
+	// finishsweep_m 移动previous arena到 free arena，
+	// current arena到 previous arena，next arena 到current arena。
+	// next arena 作为span请求内存计数，以便下一次GC循环
+	// 同时，allocBits为最新的span的申请。
+	//
 	// The pointer arithmetic is done "by hand" instead of using
 	// arrays to avoid bounds checks along critical performance
 	// paths.
 	// The sweep will free the old allocBits and set allocBits to the
 	// gcmarkBits. The gcmarkBits are replaced with a fresh zeroed
 	// out memory.
+	//
+	// 之所以使用“手动”计算指针，而不是使用数组，是为了避免关键性能路径的边界检查。
+	// 扫描将释放旧的allocBits，并将allocBits设置为gcmarkBits。gcmarkBits
+	// 将被替换为新的清零之后的内存。
 	allocBits  *gcBits
 	gcmarkBits *gcBits
 
@@ -280,22 +317,25 @@ type mspan struct {
 	// if sweepgen == h->sweepgen, the span is swept and ready to use
 	// h->sweepgen is incremented by 2 after every GC
 
-	sweepgen    uint32
-	divMul      uint16     // for divide by elemsize - divMagic.mul
-	baseMask    uint16     // if non-0, elemsize is a power of 2, & this will get object allocation base
-	allocCount  uint16     // number of allocated objects
-	spanclass   spanClass  // size class and noscan (uint8)
-	incache     bool       // being used by an mcache
-	state       mSpanState // mspaninuse etc
-	needzero    uint8      // needs to be zeroed before allocation
-	divShift    uint8      // for divide by elemsize - divMagic.shift
-	divShift2   uint8      // for divide by elemsize - divMagic.shift2
-	elemsize    uintptr    // computed from sizeclass or from npages
-	unusedsince int64      // first time spotted by gc in mspanfree state
-	npreleased  uintptr    // number of pages released to the os
-	limit       uintptr    // end of data in span
-	speciallock mutex      // guards specials list
-	specials    *special   // linked list of special records sorted by offset.
+	sweepgen   uint32
+	divMul     uint16     // for divide by elemsize - divMagic.mul
+	baseMask   uint16     // if non-0, elemsize is a power of 2, & this will get object allocation base
+	allocCount uint16     // number of allocated objects
+	spanclass  spanClass  // size class and noscan (uint8)
+	incache    bool       // being used by an mcache
+	state      mSpanState // mspaninuse etc
+	needzero   uint8      // needs to be zeroed before allocation
+	divShift   uint8      // for divide by elemsize - divMagic.shift
+	divShift2  uint8      // for divide by elemsize - divMagic.shift2
+
+	// 通过sizeclass或npages计算，比如sizeclass=3, elemsize=32bytes
+	// 对于大于32kb的内存，都是按照整数页进行分配的，elemsize=page_size*npages
+	elemsize    uintptr  // computed from sizeclass or from npages
+	unusedsince int64    // first time spotted by gc in mspanfree state
+	npreleased  uintptr  // number of pages released to the os
+	limit       uintptr  // end of data in span
+	speciallock mutex    // guards specials list
+	specials    *special // linked list of special records sorted by offset.
 }
 
 func (s *mspan) base() uintptr {
@@ -631,6 +671,8 @@ func (h *mheap) reclaim(npage uintptr) {
 
 // Allocate a new span of npage pages from the heap for GC'd memory
 // and record its size class in the HeapMap and HeapMapCache.
+// alloc_m 从heap中分配一个有npage个页面的span，并将其记录在HeapMap和
+// HeapMapCache中。
 func (h *mheap) alloc_m(npage uintptr, spanclass spanClass, large bool) *mspan {
 	_g_ := getg()
 	if _g_ != _g_.m.g0 {

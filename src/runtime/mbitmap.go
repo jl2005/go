@@ -213,6 +213,9 @@ func (s *mspan) refillAllocCache(whichByte uintptr) {
 // or after s.freeindex.
 // There are hardware instructions that can be used to make this
 // faster if profiling warrants it.
+//
+// nextFreeIndex 返回s中下一个对象，或s.freeindex之后的对象
+// 如果分析需要，可以使用硬件指令来加快速度。
 func (s *mspan) nextFreeIndex() uintptr {
 	sfreeindex := s.freeindex
 	snelems := s.nelems
@@ -700,6 +703,11 @@ func typeBitsBulkBarrier(typ *_type, dst, src, size uintptr) {
 // If this is a span of pointer-sized objects, it initializes all
 // words to pointer/scan.
 // Otherwise, it initializes all words to scalar/dead.
+//
+// initSpan 为span初始化heap的bitmap
+// 它清除所有的检查标识位。如果这个span是指针大小的对象，
+// 它初始化所有的字为pointer/scan。否则初始化所有字为
+// scalar/dead
 func (h heapBits) initSpan(s *mspan) {
 	size, n, total := s.layout()
 

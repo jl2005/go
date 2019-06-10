@@ -37,6 +37,7 @@ func (c *mcentral) init(spc spanClass) {
 }
 
 // Allocate a span to use in an MCache.
+// cacheSpan 申请一个span给mcache使用
 func (c *mcentral) cacheSpan() *mspan {
 	// Deduct credit for this span allocation and sweep if necessary.
 	spanBytes := uintptr(class_to_allocnpages[c.spanclass.sizeclass()]) * _PageSize
@@ -224,6 +225,7 @@ func (c *mcentral) freeSpan(s *mspan, preserve bool, wasempty bool) bool {
 }
 
 // grow allocates a new empty span from the heap and initializes it for c's size class.
+// grow 从heap申请一个新的空span，然后使用c的size class初始化它
 func (c *mcentral) grow() *mspan {
 	npages := uintptr(class_to_allocnpages[c.spanclass.sizeclass()])
 	size := uintptr(class_to_size[c.spanclass.sizeclass()])

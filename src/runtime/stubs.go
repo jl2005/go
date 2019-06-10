@@ -53,6 +53,12 @@ func mcall(fn func(*g))
 //	})
 //	... use x ...
 //
+// systemstack 作为系统堆栈运行fn
+// 如果是per-OS-thread（g0）调用的systemstack或是信号处理调用的systemstack
+// systemstack直接调用fn并且返回。
+// 否则，systemstack将作为有限内存的普通goroutine运行。此时，systemstack
+// 切换到per-OS-thread 堆栈，调用fn，然后切换回来。它使用fn作为参数
+// 以便共享输入和输出围绕在系统堆栈上下。
 //go:noescape
 func systemstack(fn func())
 
@@ -72,6 +78,15 @@ func badsystemstack() {
 //    for a new allocation) and hence contains only "junk".
 //
 // in memclr_*.s
+//
+// memclrNoHeapPointers 清空从ptr开始的n个字节
+// 我们通常使用typedmemclr。只有调用者知道*ptr中不含有
+// 堆指针的时候才会调用memclrNoHeapPointers：
+// 1. *ptr 是一个初始化的内存，并且它的类型是没有pointer
+// 2. *ptr 是一个未初始化的内存（例如，内存被一个新的申请
+//    使用），因此内容都是可以丢弃的
+//
+// 实现在 memclr_*.s
 //go:noescape
 func memclrNoHeapPointers(ptr unsafe.Pointer, n uintptr)
 
