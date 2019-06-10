@@ -28,8 +28,10 @@ type mcache struct {
 	// tiny is a heap pointer. Since mcache is in non-GC'd memory,
 	// we handle it by clearing it in releaseAll during mark
 	// termination.
-	tiny             uintptr
-	tinyoffset       uintptr
+	// 小对象分配器，小于16byte的对象直接使用tiny进行分配
+	tiny       uintptr
+	tinyoffset uintptr
+	// 分配的小对象的个数，并没有在其它状态中进行统计
 	local_tinyallocs uintptr // number of tiny allocs not counted in other stats
 
 	// The rest is not accessed on every malloc.

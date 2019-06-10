@@ -284,6 +284,8 @@ func prefetcht2(addr uintptr)
 func prefetchnta(addr uintptr)
 
 // round n up to a multiple of a.  a must be a power of 2.
+// round 使n扩大到a 的整数倍，a必须是2的次幂
+// x &^ y 位清空，将y中对应的位置为0
 func round(n, a uintptr) uintptr {
 	return (n + a - 1) &^ (a - 1)
 }
