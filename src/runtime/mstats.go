@@ -156,12 +156,15 @@ type mstats struct {
 var memstats mstats
 
 // A MemStats records statistics about the memory allocator.
+// MemStats 记录内存分配的统计信息
 type MemStats struct {
 	// General statistics.
 
 	// Alloc is bytes of allocated heap objects.
 	//
 	// This is the same as HeapAlloc (see below).
+	//
+	// Alloc 是heap中分配的字节数，同HeapAlloc
 	Alloc uint64
 
 	// TotalAlloc is cumulative bytes allocated for heap objects.
@@ -169,6 +172,11 @@ type MemStats struct {
 	// TotalAlloc increases as heap objects are allocated, but
 	// unlike Alloc and HeapAlloc, it does not decrease when
 	// objects are freed.
+	//
+	// TotalAlloc 为分配的heap对象的累积字节数
+	//
+	// TotalAlloc 在分配heap对象的时候进行增加，但是与Alloc和
+	// HeapAlloc不同，在对象释放的时候不会减少。
 	TotalAlloc uint64
 
 	// Sys is the total bytes of memory obtained from the OS.
@@ -179,19 +187,34 @@ type MemStats struct {
 	// likely that not all of the virtual address space is backed
 	// by physical memory at any given moment, though in general
 	// it all was at some point.
+	//
+	// Sys 是从OS获取的总共内存数
+	//
+	// Sys 是下面 XSys 字段的总和。Sys为Go 运行时堆、堆栈和其它
+	// 内部数据结构的保留虚拟地址空间。可能在给定的时刻，并非所有的
+	// 虚拟内存都管理物理内存，尽管可能在某一个时刻会关联。
 	Sys uint64
 
 	// Lookups is the number of pointer lookups performed by the
 	// runtime.
 	//
 	// This is primarily useful for debugging runtime internals.
+	//
+	// Lookups 是由运行时执行的指针查找
+	//
+	// 这主要用于调试运行时内部。
 	Lookups uint64
 
 	// Mallocs is the cumulative count of heap objects allocated.
 	// The number of live objects is Mallocs - Frees.
+	//
+	// Mallocs 是申请的heap对象的累计数。
+	// 存活的对象数为 Mallocs - Frees
 	Mallocs uint64
 
 	// Frees is the cumulative count of heap objects freed.
+	//
+	// Frees 是释放的heap对象累计数
 	Frees uint64
 
 	// Heap memory statistics.
