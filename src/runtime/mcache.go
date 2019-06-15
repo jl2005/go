@@ -120,6 +120,7 @@ func (c *mcache) refill(spc spanClass) *mspan {
 	}
 
 	if s != &emptymspan {
+		// 解除当前span的状态
 		s.incache = false
 	}
 
@@ -134,6 +135,7 @@ func (c *mcache) refill(spc spanClass) *mspan {
 		throw("span has no free space")
 	}
 
+	// 将新的span加入到cache
 	c.alloc[spc] = s
 	_g_.m.locks--
 	return s

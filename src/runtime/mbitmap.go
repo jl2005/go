@@ -219,6 +219,7 @@ func (s *mspan) refillAllocCache(whichByte uintptr) {
 func (s *mspan) nextFreeIndex() uintptr {
 	sfreeindex := s.freeindex
 	snelems := s.nelems
+	// sfreeindex 指向尾部，没有可用空间
 	if sfreeindex == snelems {
 		return sfreeindex
 	}
@@ -226,10 +227,13 @@ func (s *mspan) nextFreeIndex() uintptr {
 		throw("s.freeindex > s.nelems")
 	}
 
+	// 获取缓存中第一个可用位
 	aCache := s.allocCache
 
 	bitIndex := sys.Ctz64(aCache)
+	// 无有效位，刷新缓存
 	for bitIndex == 64 {
+		// 向后移动sfreeindex
 		// Move index to start of next cached bits.
 		sfreeindex = (sfreeindex + 64) &^ (64 - 1)
 		if sfreeindex >= snelems {
@@ -238,18 +242,22 @@ func (s *mspan) nextFreeIndex() uintptr {
 		}
 		whichByte := sfreeindex / 8
 		// Refill s.allocCache with the next 64 alloc bits.
+		// 从位图中填充后面的64位数据
 		s.refillAllocCache(whichByte)
+		// 重新计算后面的64位是否可用
 		aCache = s.allocCache
 		bitIndex = sys.Ctz64(aCache)
 		// nothing available in cached bits
 		// grab the next 8 bytes and try again.
 	}
+	// 计算基于位图的有效索引
 	result := sfreeindex + uintptr(bitIndex)
 	if result >= snelems {
 		s.freeindex = snelems
 		return snelems
 	}
 
+	// 调整缓冲区，同时更新sfreeindex的值
 	s.allocCache >>= uint(bitIndex + 1)
 	sfreeindex = result + 1
 
