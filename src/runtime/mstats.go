@@ -21,8 +21,17 @@ import (
 //
 // Many of these fields are updated on the fly, while others are only
 // updated when updatememstats is called.
+//
+// 统计信息
+// 如果更改这个结构体，同时也需要更新下面的MemStats。
+// 他们的结构必须完全匹配。
+//
+// 更详细的描述参照MemStats的文档。这里将进一步记录与MemStats不同的字段。
+//
+// 这里的大部分字段都是在线更新的，其它字段是通过调用updatememstats更新。
 type mstats struct {
 	// General statistics.
+	// 通用统计
 	alloc       uint64 // bytes allocated and not yet freed
 	total_alloc uint64 // bytes allocated (even if freed)
 	sys         uint64 // bytes obtained from system (should be sum of xxx_sys below, no locking, approximate)
@@ -35,6 +44,9 @@ type mstats struct {
 	//
 	// Like MemStats, heap_sys and heap_inuse do not count memory
 	// in manually-managed spans.
+	//
+	// 关于申请堆的统计信息。使用mheap.lock保护
+	// 与MemStats一样，heap_sys和heap_inuse不计算手动管理的span中的内存。
 	heap_alloc    uint64 // bytes allocated and not yet freed (same as alloc above)
 	heap_sys      uint64 // virtual address space obtained from system for GC'd heap
 	heap_idle     uint64 // bytes in idle spans
@@ -616,6 +628,11 @@ func init() {
 // call to ReadMemStats. This is in contrast with a heap profile,
 // which is a snapshot as of the most recently completed garbage
 // collection cycle.
+//
+// ReadMemStats 使用内存分配器统计信息填充m。
+//
+// 从 ReadMemStats 调用开始，返回的内存分配器统计的最新的信息。
+// 这与堆分析形成对比，堆分析是最近完成的垃圾收集周期的快照。
 func ReadMemStats(m *MemStats) {
 	stopTheWorld("read mem stats")
 
