@@ -628,8 +628,9 @@ var zerobase uintptr
 // Otherwise it returns 0.
 // nextFreeFast 返回下一个空闲对象，否则返回0
 func nextFreeFast(s *mspan) gclinkptr {
+	// 基于缓存查找可用位
 	theBit := sys.Ctz64(s.allocCache) // Is there a free object in the allocCache?
-	// 相当于这个span是空的
+	// 如果有可用的
 	if theBit < 64 {
 		result := s.freeindex + uintptr(theBit)
 		if result < s.nelems {
@@ -637,6 +638,7 @@ func nextFreeFast(s *mspan) gclinkptr {
 			if freeidx%64 == 0 && freeidx != s.nelems {
 				return 0
 			}
+			// 调整可用内存地址
 			s.allocCache >>= uint(theBit + 1)
 			s.freeindex = freeidx
 			v := gclinkptr(result*s.elemsize + s.base())
@@ -661,19 +663,23 @@ func nextFreeFast(s *mspan) gclinkptr {
 func (c *mcache) nextFree(spc spanClass) (v gclinkptr, s *mspan, shouldhelpgc bool) {
 	s = c.alloc[spc]
 	shouldhelpgc = false
+	// 获取下一个可用object索引
 	freeIndex := s.nextFreeIndex()
+	// 没有空余则扩容
 	if freeIndex == s.nelems {
 		// The span is full.
 		if uintptr(s.allocCount) != s.nelems {
 			println("runtime: s.allocCount=", s.allocCount, "s.nelems=", s.nelems)
 			throw("s.allocCount != s.nelems && freeIndex == s.nelems")
 		}
+		// 从mcentral获取内存
 		systemstack(func() {
 			c.refill(spc)
 		})
 		shouldhelpgc = true
 		s = c.alloc[spc]
 
+		// 重新获取可用的索引
 		freeIndex = s.nextFreeIndex()
 	}
 
@@ -841,6 +847,7 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
 			(*[2]uint64)(x)[1] = 0
 			// See if we need to replace the existing tiny block with the new one
 			// based on amount of remaining free space.
+			// 对比新旧两个tiny 内存，保留剩余空间大的那个
 			if size < c.tinyoffset || c.tiny == 0 {
 				c.tiny = uintptr(x)
 				c.tinyoffset = size
@@ -848,6 +855,11 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
 			size = maxTinySize
 		} else {
 			// 16byte -- 32KB 的内存分配
+			// +- 如何将内存大小映射到对应的span ？
+			// 由于不能将32k内所有的数字都指定一个映射，所以这里采用了分块的方式进行映射：
+			// 1. 对于小于 1024byte 的内存，按照8 byte 的步长进行划分
+			// 2. 对于1024 byte - 32k 的内存按照128 byte的步长进行划分
+			// 通过这种方式可以极大的减少映射数组的大小
 			var sizeclass uint8
 			if size <= smallSizeMax-8 {
 				// size_to_class8 按照8 byte进行划分，对应的sizeclass
@@ -855,7 +867,9 @@ func mallocgc(size uintptr, typ *_type, needzero bool) unsafe.Pointer {
 			} else {
 				sizeclass = size_to_class128[(size-smallSizeMax+largeSizeDiv-1)/largeSizeDiv]
 			}
+			// 获取class对应的大小
 			size = uintptr(class_to_size[sizeclass])
+			// sizeclass << 1 | noscan
 			spc := makeSpanClass(sizeclass, noscan)
 			span := c.alloc[spc]
 			v := nextFreeFast(span)

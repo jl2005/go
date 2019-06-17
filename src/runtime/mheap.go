@@ -17,6 +17,9 @@ import (
 // minPhysPageSize is a lower-bound on the physical page size. The
 // true physical page size may be larger than this. In contrast,
 // sys.PhysPageSize is an upper-bound on the physical page size.
+//
+// minPhysPageSize 是物理页面大小的下限。实际的物理页面大小可能比这个大。
+// 相对的，sys.PhysPageSize是物理页面大小的上限。
 const minPhysPageSize = 4096
 
 // Main malloc heap.
@@ -25,6 +28,11 @@ const minPhysPageSize = 4096
 //
 // mheap must not be heap-allocated because it contains mSpanLists,
 // which must not be heap-allocated.
+//
+// 主分配堆
+// heap 是 "free[]" 和 "large" 的数组，同时其它全局数据也在这。
+//
+// mheap 不能从堆上分配，因为它包含的mSpanLists 不能从堆上分配。
 //
 //go:notinheap
 type mheap struct {
@@ -561,6 +569,7 @@ func (h *mheap) setArenaUsed(arena_used uintptr, racemap bool) {
 	// avoids faults when other threads try access these regions immediately
 	// after observing the change to arena_used.
 
+	// 同步分配bitmap 和 span的内存
 	// Map the bitmap.
 	h.mapBits(arena_used)
 
@@ -705,6 +714,7 @@ func (h *mheap) alloc_m(npage uintptr, spanclass spanClass, large bool) *mspan {
 	memstats.tinyallocs += uint64(_g_.m.mcache.local_tinyallocs)
 	_g_.m.mcache.local_tinyallocs = 0
 
+	// 从heap中提取内存块
 	s := h.allocSpanLocked(npage, &memstats.heap_inuse)
 	if s != nil {
 		// Record span info, because gc needs to be
@@ -823,11 +833,15 @@ func (h *mheap) allocManual(npage uintptr, stat *uint64) *mspan {
 // Allocates a span of the given size.  h must be locked.
 // The returned span has been removed from the
 // free list, but its state is still MSpanFree.
+//
+// 先从自己的空闲区（free和freelarge）找找有没有可用的，
+// 如果没有再从操作系统申请
 func (h *mheap) allocSpanLocked(npage uintptr, stat *uint64) *mspan {
 	var list *mSpanList
 	var s *mspan
 
 	// Try in fixed-size lists up to max.
+	// 1. 从指定页数起，遍历所有free列表
 	for i := int(npage); i < len(h.free); i++ {
 		list = &h.free[i]
 		if !list.isEmpty() {
@@ -837,6 +851,7 @@ func (h *mheap) allocSpanLocked(npage uintptr, stat *uint64) *mspan {
 		}
 	}
 	// Best fit in list of large spans.
+	// 2. 从freelarge中查找
 	s = h.allocLarge(npage) // allocLarge removed s from h.freelarge for us
 	if s == nil {
 		if !h.grow(npage) {
@@ -862,11 +877,14 @@ HaveSpan:
 		s.npreleased = 0
 	}
 
+	// 如果返回的页数超过需求，则需要将多余的空间添加到heap
 	if s.npages > npage {
 		// Trim extra and put it back in the heap.
+		// 创建一个新的span，用来存放多余的页
 		t := (*mspan)(h.spanalloc.alloc())
 		t.init(s.base()+npage<<_PageShift, s.npages-npage)
 		s.npages = npage
+		// 计算分隔下来的内存块的索引
 		p := (t.base() - h.arena_start) >> _PageShift
 		if p > 0 {
 			h.spans[p-1] = s
@@ -876,11 +894,13 @@ HaveSpan:
 		t.needzero = s.needzero
 		s.state = _MSpanManual // prevent coalescing with s
 		t.state = _MSpanManual
+		// 将分隔下来的内存块放回堆
 		h.freeSpanLocked(t, false, false, s.unusedsince)
 		s.state = _MSpanFree
 	}
 	s.unusedsince = 0
 
+	// 计算索引号，并使用span指针填充heap.spans反查表
 	p := (s.base() - h.arena_start) >> _PageShift
 	for n := uintptr(0); n < npage; n++ {
 		h.spans[p+n] = s
@@ -1028,6 +1048,7 @@ func (h *mheap) freeManual(s *mspan, stat *uint64) {
 }
 
 // s must be on a busy list (h.busy or h.busylarge) or unlinked.
+// 释放span对应的内存空间，如果左右两面的内存空间已经释放，则合并。
 func (h *mheap) freeSpanLocked(s *mspan, acctinuse, acctidle bool, unusedsince int64) {
 	switch s.state {
 	case _MSpanManual:

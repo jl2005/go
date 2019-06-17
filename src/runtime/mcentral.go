@@ -51,7 +51,12 @@ func (c *mcentral) cacheSpan() *mspan {
 	sg := mheap_.sweepgen
 retry:
 	var s *mspan
+	// 遍历有剩余空间的列表
 	for s = c.nonempty.first; s != nil; s = s.next {
+		// sweepgen 表示当前的状态：
+		// sg-2: 垃圾已经标记，需要清理
+		// sg-1: 正在清理
+		// sg  : 可以使用的span
 		if s.sweepgen == sg-2 && atomic.Cas(&s.sweepgen, sg-2, sg-1) {
 			c.nonempty.remove(s)
 			c.empty.insertBack(s)
@@ -70,15 +75,18 @@ retry:
 		goto havespan
 	}
 
+	// 尝试从已经分配出去的span中找出可用的
 	for s = c.empty.first; s != nil; s = s.next {
 		if s.sweepgen == sg-2 && atomic.Cas(&s.sweepgen, sg-2, sg-1) {
 			// we have an empty span that requires sweeping,
 			// sweep it and see if we can free some space in it
 			c.empty.remove(s)
 			// swept spans are at the end of the list
+			// 将span转移到尾部
 			c.empty.insertBack(s)
 			unlock(&c.lock)
 			s.sweep(true)
+			// 检查是否有可用空间
 			freeIndex := s.nextFreeIndex()
 			if freeIndex != s.nelems {
 				s.freeindex = freeIndex
@@ -104,6 +112,7 @@ retry:
 	unlock(&c.lock)
 
 	// Replenish central list if empty.
+	// 从heap获取新的span
 	s = c.grow()
 	if s == nil {
 		return nil
@@ -136,6 +145,7 @@ havespan:
 		// heap_live changed.
 		gcController.revise()
 	}
+	// 设置span状态
 	s.incache = true
 	freeByteBase := s.freeindex &^ (64 - 1)
 	whichByte := freeByteBase / 8

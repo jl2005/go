@@ -629,10 +629,10 @@ func init() {
 // which is a snapshot as of the most recently completed garbage
 // collection cycle.
 //
-// ReadMemStats 使用内存分配器统计信息填充m。
+// ReadMemStats 使用内存分配器统计信息填充 m。
 //
-// 从 ReadMemStats 调用开始，返回的内存分配器统计的最新的信息。
-// 这与堆分析形成对比，堆分析是最近完成的垃圾收集周期的快照。
+// 从 ReadMemStats 调用开始，返回的内存分配器统计信息是最新的。
+// 这与heap profile 形成对照，heap profile 是最近完成的垃圾收集周期的快照。
 func ReadMemStats(m *MemStats) {
 	stopTheWorld("read mem stats")
 
@@ -704,6 +704,7 @@ func updatememstats() {
 		memstats.mcache_sys + memstats.buckhash_sys + memstats.gc_sys + memstats.other_sys
 
 	// We also count stacks_inuse as sys memory.
+	// +-? sys已经包含memstats.stacks_sys，为什么还要加memstats.stacks_inuse ？
 	memstats.sys += memstats.stacks_inuse
 
 	// Calculate memory allocator stats.
@@ -713,6 +714,12 @@ func updatememstats() {
 	// Total number of mallocs is calculated as number of frees plus number of alive objects.
 	// Similarly, total amount of allocated memory is calculated as amount of freed memory
 	// plus amount of alive heap memory.
+	//
+	// 计算内存分配器统计信息。
+	// 在程序执行期间，我们只计算释放的数量和释放的内存量。
+	// 通过扫描所有 span , 计算堆中当前活动对象的数量和活动堆内存的数量。
+	// malloc 的对象总数是空闲对象加上活跃对象。
+	// 类似地，分配的内存总量是释放的内存量加上活动堆内存量。
 	memstats.alloc = 0
 	memstats.total_alloc = 0
 	memstats.nmalloc = 0
