@@ -274,7 +274,7 @@ type mspan struct {
 	//
 	// 缓存freeindex中已经分配的位。allocCache是被移位的，使得最低位对应于
 	// freeindex。allocCache保存allocBits的补码，因此可以直接使用ctz（计算尾部0）
-	// allocCache 可能包换超过s.elems的位，调用者必须忽略这些。
+	// allocCache 可能包含超过s.nelems的位，调用者必须忽略这些。
 	allocCache uint64
 
 	// allocBits and gcmarkBits hold pointers to a span's mark and
