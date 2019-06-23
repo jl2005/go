@@ -373,6 +373,7 @@ func mallocinit() {
 		// 用户地址空间限制为39位，地址空间更小。
 		arenaSize := round(_MaxMem, _PageSize)
 		pSize = bitmapSize + spansSize + arenaSize + _PageSize
+		// 尝试从不同的起始地址开始
 		for i := 0; i <= 0x7f; i++ {
 			switch {
 			case GOARCH == "arm64" && GOOS == "darwin":

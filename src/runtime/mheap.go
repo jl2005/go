@@ -36,7 +36,11 @@ const minPhysPageSize = 4096
 //
 //go:notinheap
 type mheap struct {
-	lock      mutex
+	lock mutex
+	// 这是一个 SpanList 数组，每个 SpanList 里面的 mspan
+	// 由 1 ~ 127 (_MaxMHeapList - 1) 个 page 组成。
+	// 比如 free[3] 是由包含 3 个 page 的 mspan 组成的链表。
+	// free 表示的是 free list，也就是未分配的。对应的还有 busy list。
 	free      [_MaxMHeapList]mSpanList // free lists of given length up to _MaxMHeapList
 	freelarge mTreap                   // free treap of length >= _MaxMHeapList
 	busy      [_MaxMHeapList]mSpanList // busy lists of large spans of given length
@@ -67,6 +71,8 @@ type mheap struct {
 	// This is backed by a reserved region of the address space so
 	// it can grow without moving. The memory up to len(spans) is
 	// mapped. cap(spans) indicates the total reserved memory.
+	//
+	// 记录 arena 区域页号（page number）和 mspan 的映射关系。
 	spans []*mspan
 
 	// sweepSpans contains two mspan stacks: one of swept in-use
@@ -841,7 +847,7 @@ func (h *mheap) allocSpanLocked(npage uintptr, stat *uint64) *mspan {
 	var s *mspan
 
 	// Try in fixed-size lists up to max.
-	// 1. 从指定页数起，遍历所有free列表
+	// 1. 从满足需求的页数开始扫描free列表
 	for i := int(npage); i < len(h.free); i++ {
 		list = &h.free[i]
 		if !list.isEmpty() {
