@@ -113,6 +113,7 @@ func (c *mcache) refill(spc spanClass) *mspan {
 
 	_g_.m.locks++
 	// Return the current cached span to the central lists.
+	// 1. 将当前cache中的span归还到mcentral
 	s := c.alloc[spc]
 
 	if uintptr(s.allocCount) != s.nelems {
@@ -125,7 +126,7 @@ func (c *mcache) refill(spc spanClass) *mspan {
 	}
 
 	// Get a new cached span from the central lists.
-	// 从central列表中获取一个新的span
+	// 2. 从central列表中获取一个新的span
 	s = mheap_.central[spc].mcentral.cacheSpan()
 	if s == nil {
 		throw("out of memory")
