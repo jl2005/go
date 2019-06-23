@@ -231,8 +231,7 @@ type mspan struct {
 	list *mSpanList // For debugging. TODO: Remove.
 
 	startAddr uintptr // address of first byte of span aka s.base()
-	// span中包page个数
-	npages uintptr // number of pages in span
+	npages    uintptr // number of pages in span
 
 	manualFreeList gclinkptr // list of free objects in _MSpanManual spans
 
@@ -259,8 +258,8 @@ type mspan struct {
 	//
 	// Object n starts at address n*elemsize + (start << pageShift).
 	//
-	// span中的allocBits是一个对象的bitmap。
-	// 如果n >= freeindex 并且allocBits[n/8] & (1<<(n%8))=0
+	// allocBits 是span中对象的bitmap。
+	// 如果n >= freeindex 并且 allocBits[n/8] & (1<<(n%8))=0
 	// 则对象n是空闲的。否则对象n是已经分配的。nelem对应的
 	// 位是没有定义的，并且不应该被访问
 	//
@@ -278,8 +277,9 @@ type mspan struct {
 	// allocCache may contain bits beyond s.nelems; the caller must ignore
 	// these.
 	//
-	// 缓存freeindex中已经分配的位。allocCache是被移位的，使得最低位对应于
-	// freeindex。allocCache保存allocBits的补码，因此可以直接使用ctz（计算尾部0）
+	// 缓存freeindex中已经分配的位。
+	// allocCache 是被移位的，使得最低位对应于freeindex。
+	// allocCache 保存allocBits的补码，因此可以直接使用ctz（计算尾部0）
 	// allocCache 可能包含超过s.nelems的位，调用者必须忽略这些。
 	allocCache uint64
 
@@ -300,7 +300,7 @@ type mspan struct {
 	// as allocBits for newly allocated spans.
 	//
 	// allocBits 和 gcmarkBits持有span的标记和分配位。
-	// 指针是8字节对齐的。有3中状态：
+	// 指针是8字节对齐的。这个数据可以存储在3个区域。
 	//
 	// * free: 过期的arena不再被使用，可以被重用
 	// * next: 保存在下一次循环中使用的信息
@@ -311,6 +311,8 @@ type mspan struct {
 	// current arena到 previous arena，next arena 到current arena。
 	// next arena 作为span请求内存计数，以便下一次GC循环
 	// 同时，allocBits为最新的span的申请。
+	//
+	// next -> current -> previous -> free
 	//
 	// The pointer arithmetic is done "by hand" instead of using
 	// arrays to avoid bounds checks along critical performance
