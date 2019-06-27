@@ -1186,9 +1186,11 @@ func mstart1() {
 		_g_.m.helpgc = 0
 		stopm()
 	} else if _g_.m != &m0 {
+		// 绑定P
 		acquirep(_g_.m.nextp.ptr())
 		_g_.m.nextp = 0
 	}
+	// 执行调度
 	schedule()
 }
 
@@ -2209,6 +2211,7 @@ func schedule() {
 		throw("schedule: holding locks")
 	}
 
+	// 处理m已经被lock的情况
 	if _g_.m.lockedg != nil {
 		stoplockedm()
 		execute(_g_.m.lockedg, false) // Never returns.
@@ -2235,6 +2238,7 @@ top:
 	if gp == nil && gcBlackenEnabled != 0 {
 		gp = gcController.findRunnableGCWorker(_g_.m.p.ptr())
 	}
+	// 以下是找到可运行的G
 	if gp == nil {
 		// Check the global runnable queue once in a while to ensure fairness.
 		// Otherwise two goroutines can completely occupy the local runqueue
@@ -2269,6 +2273,7 @@ top:
 		goto top
 	}
 
+	// 真正执行gp
 	execute(gp, inheritTime)
 }
 
@@ -2999,9 +3004,11 @@ func newproc1(fn *funcval, argp *uint8, narg int32, nret int32, callerpc uintptr
 		}
 	}
 
+	// 初始化G的gobuf，保存sp、pc、任务函数等
 	memclrNoHeapPointers(unsafe.Pointer(&newg.sched), unsafe.Sizeof(newg.sched))
 	newg.sched.sp = sp
 	newg.stktopsp = sp
+	// 保存goexist的地址到sched.pc
 	newg.sched.pc = funcPC(goexit) + sys.PCQuantum // +PCQuantum so that previous instruction is in same function
 	newg.sched.g = guintptr(unsafe.Pointer(newg))
 	gostartcallfn(&newg.sched, fn)
@@ -3014,6 +3021,7 @@ func newproc1(fn *funcval, argp *uint8, narg int32, nret int32, callerpc uintptr
 		atomic.Xadd(&sched.ngsys, +1)
 	}
 	newg.gcscanvalid = false
+	// 更改当前G的状态为_Grunnable
 	casgstatus(newg, _Gdead, _Grunnable)
 
 	if _p_.goidcache == _p_.goidcacheend {
@@ -3024,6 +3032,7 @@ func newproc1(fn *funcval, argp *uint8, narg int32, nret int32, callerpc uintptr
 		_p_.goidcache -= _GoidCacheBatch - 1
 		_p_.goidcacheend = _p_.goidcache + _GoidCacheBatch
 	}
+	// 生成唯一的goid
 	newg.goid = int64(_p_.goidcache)
 	_p_.goidcache++
 	if raceenabled {

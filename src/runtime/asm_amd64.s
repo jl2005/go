@@ -170,11 +170,12 @@ ok:
 	MOVL	AX, 0(SP)
 	MOVQ	24(SP), AX		// copy argv
 	MOVQ	AX, 8(SP)
-	CALL	runtime·args(SB)
-	CALL	runtime·osinit(SB)
-	CALL	runtime·schedinit(SB)
+	CALL	runtime·args(SB) // 处理args
+	CALL	runtime·osinit(SB) // OS初始化，os_linux.go
+	CALL	runtime·schedinit(SB) // 调度系统初始化, proc.go
 
 	// create a new goroutine to start program
+	// 创建goroutine，然后开始执行程序
 	MOVQ	$runtime·mainPC(SB), AX		// entry
 	PUSHQ	AX
 	PUSHQ	$0			// arg size
@@ -183,6 +184,7 @@ ok:
 	POPQ	AX
 
 	// start this M
+	// 启动线程，并且启动调度系统
 	CALL	runtime·mstart(SB)
 
 	MOVL	$0xf1, 0xf1  // crash
@@ -225,6 +227,7 @@ TEXT runtime·gosave(SB), NOSPLIT, $0-8
 
 // void gogo(Gobuf*)
 // restore state from Gobuf; longjmp
+// 从g0栈切换到G栈，然后JMP到任务函数代码
 TEXT runtime·gogo(SB), NOSPLIT, $16-8
 	MOVQ	buf+0(FP), BX		// gobuf
 
@@ -251,7 +254,7 @@ nilctxt:
 	MOVQ	$0, gobuf_ret(BX)
 	MOVQ	$0, gobuf_ctxt(BX)
 	MOVQ	$0, gobuf_bp(BX)
-	MOVQ	gobuf_pc(BX), BX
+	MOVQ	gobuf_pc(BX), BX // 获取G任务函数的地址
 	JMP	BX
 
 // func mcall(fn func(*g))
