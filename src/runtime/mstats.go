@@ -347,7 +347,7 @@ type MemStats struct {
 	// 相同大小的对象直接使用。
 	//
 	// HeapInuse 减 HeapAlloc 可以用来评估专用于特定大小分类的
-	// 内存量。这个是内存碎片的上限，但是它通常能you效的重用。
+	// 内存量。这个是内存碎片的上限，但是它通常能有效的重用。
 	HeapInuse uint64
 
 	// HeapReleased is bytes of physical memory returned to the OS.

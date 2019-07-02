@@ -36,7 +36,11 @@ const minPhysPageSize = 4096
 //
 //go:notinheap
 type mheap struct {
-	lock      mutex
+	lock mutex
+	// 这是一个 SpanList 数组，每个 SpanList 里面的 mspan
+	// 由 1 ~ 127 (_MaxMHeapList - 1) 个 page 组成。
+	// 比如 free[3] 是由包含 3 个 page 的 mspan 组成的链表。
+	// free 表示的是 free list，也就是未分配的。对应的还有 busy list。
 	free      [_MaxMHeapList]mSpanList // free lists of given length up to _MaxMHeapList
 	freelarge mTreap                   // free treap of length >= _MaxMHeapList
 	busy      [_MaxMHeapList]mSpanList // busy lists of large spans of given length
@@ -67,6 +71,8 @@ type mheap struct {
 	// This is backed by a reserved region of the address space so
 	// it can grow without moving. The memory up to len(spans) is
 	// mapped. cap(spans) indicates the total reserved memory.
+	//
+	// 记录 arena 区域页号（page number）和 mspan 的映射关系。
 	spans []*mspan
 
 	// sweepSpans contains two mspan stacks: one of swept in-use
@@ -225,8 +231,7 @@ type mspan struct {
 	list *mSpanList // For debugging. TODO: Remove.
 
 	startAddr uintptr // address of first byte of span aka s.base()
-	// span中包page个数
-	npages uintptr // number of pages in span
+	npages    uintptr // number of pages in span
 
 	manualFreeList gclinkptr // list of free objects in _MSpanManual spans
 
@@ -253,8 +258,8 @@ type mspan struct {
 	//
 	// Object n starts at address n*elemsize + (start << pageShift).
 	//
-	// span中的allocBits是一个对象的bitmap。
-	// 如果n >= freeindex 并且allocBits[n/8] & (1<<(n%8))=0
+	// allocBits 是span中对象的bitmap。
+	// 如果n >= freeindex 并且 allocBits[n/8] & (1<<(n%8))=0
 	// 则对象n是空闲的。否则对象n是已经分配的。nelem对应的
 	// 位是没有定义的，并且不应该被访问
 	//
@@ -272,9 +277,10 @@ type mspan struct {
 	// allocCache may contain bits beyond s.nelems; the caller must ignore
 	// these.
 	//
-	// 缓存freeindex中已经分配的位。allocCache是被移位的，使得最低位对应于
-	// freeindex。allocCache保存allocBits的补码，因此可以直接使用ctz（计算尾部0）
-	// allocCache 可能包换超过s.elems的位，调用者必须忽略这些。
+	// 缓存freeindex中已经分配的位。
+	// allocCache 是被移位的，使得最低位对应于freeindex。
+	// allocCache 保存allocBits的补码，因此可以直接使用ctz（计算尾部0）
+	// allocCache 可能包含超过s.nelems的位，调用者必须忽略这些。
 	allocCache uint64
 
 	// allocBits and gcmarkBits hold pointers to a span's mark and
@@ -294,7 +300,7 @@ type mspan struct {
 	// as allocBits for newly allocated spans.
 	//
 	// allocBits 和 gcmarkBits持有span的标记和分配位。
-	// 指针是8字节对齐的。有3中状态：
+	// 指针是8字节对齐的。这个数据可以存储在3个区域。
 	//
 	// * free: 过期的arena不再被使用，可以被重用
 	// * next: 保存在下一次循环中使用的信息
@@ -305,6 +311,8 @@ type mspan struct {
 	// current arena到 previous arena，next arena 到current arena。
 	// next arena 作为span请求内存计数，以便下一次GC循环
 	// 同时，allocBits为最新的span的申请。
+	//
+	// next -> current -> previous -> free
 	//
 	// The pointer arithmetic is done "by hand" instead of using
 	// arrays to avoid bounds checks along critical performance
@@ -841,7 +849,7 @@ func (h *mheap) allocSpanLocked(npage uintptr, stat *uint64) *mspan {
 	var s *mspan
 
 	// Try in fixed-size lists up to max.
-	// 1. 从指定页数起，遍历所有free列表
+	// 1. 从满足需求的页数开始扫描free列表
 	for i := int(npage); i < len(h.free); i++ {
 		list = &h.free[i]
 		if !list.isEmpty() {

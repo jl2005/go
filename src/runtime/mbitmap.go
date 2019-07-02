@@ -214,7 +214,7 @@ func (s *mspan) refillAllocCache(whichByte uintptr) {
 // There are hardware instructions that can be used to make this
 // faster if profiling warrants it.
 //
-// nextFreeIndex 返回s中下一个对象，或s.freeindex之后的对象
+// nextFreeIndex 返回s中s.freeindex或之后的下一个空闲可用对象。
 // 如果分析需要，可以使用硬件指令来加快速度。
 func (s *mspan) nextFreeIndex() uintptr {
 	sfreeindex := s.freeindex
@@ -228,6 +228,7 @@ func (s *mspan) nextFreeIndex() uintptr {
 	}
 
 	// 获取缓存中第一个可用位
+	// +-? 为什么要新申请一个变量？
 	aCache := s.allocCache
 
 	bitIndex := sys.Ctz64(aCache)
